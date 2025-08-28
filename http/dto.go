@@ -22,6 +22,10 @@ func (t TaskDTO) ValidateForCreate() error {
 	return nil
 }
 
+type CompleteDTO struct {
+	Complete bool
+}
+
 type ErrorDTO struct {
 	Message string
 	Time    time.Time
