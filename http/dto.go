@@ -38,3 +38,10 @@ func (e ErrorDTO) ToString() string {
 	}
 	return string(b)
 }
+
+func newErrorDTO(err error, time time.Time) ErrorDTO {
+	return ErrorDTO{
+		Message: err.Error(),
+		Time:    time,
+	}
+}

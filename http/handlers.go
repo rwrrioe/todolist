@@ -21,6 +21,20 @@ func NewHTTPHandlers(todoList *todo.List) *HTTPHandlers {
 	}
 }
 
+func HandleError(w http.ResponseWriter, err error) {
+	status := http.StatusInternalServerError
+
+	if errors.Is(err, todo.ErrTaskNotFound) {
+		status = http.StatusConflict
+	} else if errors.Is(err, todo.ErrTaskNotFound) {
+		status = http.StatusNotFound
+	}
+
+	errDTO := newErrorDTO(err, time.Now())
+	http.Error(w, errDTO.ToString(), status)
+
+}
+
 /*
 pattern: tasks
 methon: POST
@@ -37,35 +51,18 @@ failed
 func (h *HTTPHandlers) HandlerCreateTask(w http.ResponseWriter, r *http.Request) {
 	var taskDTO TaskDTO
 	if err := json.NewDecoder(r.Body).Decode(&taskDTO); err != nil {
-		errDTO := ErrorDTO{
-			Message: err.Error(),
-			Time:    time.Now(),
-		}
-
+		errDTO := newErrorDTO(err, time.Now())
 		http.Error(w, errDTO.ToString(), http.StatusBadRequest)
 	}
 
 	if err := taskDTO.ValidateForCreate(); err != nil {
-		errDTO := ErrorDTO{
-			Message: err.Error(),
-			Time:    time.Now(),
-		}
-
+		errDTO := newErrorDTO(err, time.Now())
 		http.Error(w, errDTO.ToString(), http.StatusBadRequest)
 	}
 
 	todoTask := todo.NewTask(taskDTO.Title, taskDTO.Description)
 	if err := h.todoList.AddTask(todoTask); err != nil {
-		errDTO := ErrorDTO{
-			Message: err.Error(),
-			Time:    time.Now(),
-		}
-
-		if errors.Is(err, todo.ErrTaskAlreadyExists) {
-			http.Error(w, errDTO.ToString(), http.StatusConflict)
-		} else {
-			http.Error(w, errDTO.ToString(), http.StatusInternalServerError)
-		}
+		HandleError(w, err)
 		return
 	}
 
@@ -99,15 +96,8 @@ func (h *HTTPHandlers) HandlerGetTask(w http.ResponseWriter, r *http.Request) {
 
 	task, err := h.todoList.GetTask(title)
 	if err != nil {
-		errDTO := ErrorDTO{
-			Message: err.Error(),
-			Time:    time.Now(),
-		}
-		if errors.Is(err, todo.ErrTaskNotFound) {
-			http.Error(w, errDTO.ToString(), http.StatusNotFound)
-		} else {
-			http.Error(w, errDTO.ToString(), http.StatusInternalServerError)
-		}
+		HandleError(w, err)
+		return
 	}
 	b, err := json.MarshalIndent(task, "", "    ")
 	if err != nil {
@@ -191,10 +181,7 @@ failed:
 func (h *HTTPHandlers) HandlerCompleteTask(w http.ResponseWriter, r *http.Request) {
 	CompleteDTO := CompleteDTO{false}
 	if err := json.NewDecoder(r.Body).Decode(&CompleteDTO); err != nil {
-		errDTO := ErrorDTO{
-			Message: err.Error(),
-			Time:    time.Now(),
-		}
+		errDTO := newErrorDTO(err, time.Now())
 		http.Error(w, errDTO.ToString(), http.StatusBadRequest)
 	}
 
@@ -202,30 +189,15 @@ func (h *HTTPHandlers) HandlerCompleteTask(w http.ResponseWriter, r *http.Reques
 
 	if CompleteDTO.Complete {
 		if err := h.todoList.CompleteTask(title); err != nil {
-			errDTO := ErrorDTO{
-				Message: err.Error(),
-				Time:    time.Now(),
-			}
-			if errors.Is(err, todo.ErrTaskNotFound) {
-				http.Error(w, errDTO.ToString(), http.StatusNotFound)
-			} else {
-				http.Error(w, errDTO.ToString(), http.StatusInternalServerError)
-			}
+			HandleError(w, err)
 			return
 		} else {
 			if err := h.todoList.UncompleteTask(title); err != nil {
-				errDTO := ErrorDTO{
-					Message: err.Error(),
-					Time:    time.Now(),
-				}
-				if errors.Is(err, todo.ErrTaskNotFound) {
-					http.Error(w, errDTO.ToString(), http.StatusNotFound)
-				} else {
-					http.Error(w, errDTO.ToString(), http.StatusInternalServerError)
-				}
+				HandleError(w, err)
 				return
 			}
 		}
+
 	}
 }
 
@@ -246,15 +218,7 @@ failed:
 func (h *HTTPHandlers) HandlerDeleteTask(w http.ResponseWriter, r *http.Request) {
 	title := mux.Vars(r)["title"]
 	if err := h.todoList.DeleteTask(title); err != nil {
-		errDTO := ErrorDTO{
-			Message: err.Error(),
-			Time:    time.Now(),
-		}
-		if errors.Is(err, todo.ErrTaskNotFound) {
-			http.Error(w, errDTO.ToString(), http.StatusNotFound)
-		} else {
-			http.Error(w, errDTO.ToString(), http.StatusInternalServerError)
-		}
+		HandleError(w, err)
 		return
 	}
 
