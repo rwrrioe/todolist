@@ -35,6 +35,11 @@ func HandleError(w http.ResponseWriter, err error) {
 
 }
 
+func HandleBadRequest(w http.ResponseWriter, err error) {
+	errDTO := newErrorDTO(err, time.Now())
+	http.Error(w, errDTO.ToString(), http.StatusBadRequest)
+}
+
 /*
 pattern: tasks
 methon: POST
@@ -53,11 +58,12 @@ func (h *HTTPHandlers) HandlerCreateTask(w http.ResponseWriter, r *http.Request)
 	if err := json.NewDecoder(r.Body).Decode(&taskDTO); err != nil {
 		errDTO := newErrorDTO(err, time.Now())
 		http.Error(w, errDTO.ToString(), http.StatusBadRequest)
+		return
 	}
 
 	if err := taskDTO.ValidateForCreate(); err != nil {
-		errDTO := newErrorDTO(err, time.Now())
-		http.Error(w, errDTO.ToString(), http.StatusBadRequest)
+		HandleBadRequest(w, err)
+		return
 	}
 
 	todoTask := todo.NewTask(taskDTO.Title, taskDTO.Description)
@@ -179,25 +185,41 @@ failed:
 	-responce body: JSON with error, time
 */
 func (h *HTTPHandlers) HandlerCompleteTask(w http.ResponseWriter, r *http.Request) {
-	CompleteDTO := CompleteDTO{false}
-	if err := json.NewDecoder(r.Body).Decode(&CompleteDTO); err != nil {
-		errDTO := newErrorDTO(err, time.Now())
-		http.Error(w, errDTO.ToString(), http.StatusBadRequest)
+	completeDTO := CompleteDTO{false}
+	if err := json.NewDecoder(r.Body).Decode(&completeDTO); err != nil {
+		HandleBadRequest(w, err)
+		return
 	}
 
 	title := mux.Vars(r)["title"]
 
-	if CompleteDTO.Complete {
+	if completeDTO.Complete {
 		if err := h.todoList.CompleteTask(title); err != nil {
 			HandleError(w, err)
 			return
-		} else {
-			if err := h.todoList.UncompleteTask(title); err != nil {
-				HandleError(w, err)
-				return
-			}
 		}
+	} else {
+		if err := h.todoList.UncompleteTask(title); err != nil {
+			HandleError(w, err)
+			return
+		}
+	}
 
+	task, err := h.todoList.GetTask(title)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	b, err := json.MarshalIndent(task, "", "    ")
+	if err != nil {
+		panic(err)
+	}
+
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(b); err != nil {
+		fmt.Println("failed to write http response:", err)
+		return
 	}
 }
 
@@ -223,5 +245,4 @@ func (h *HTTPHandlers) HandlerDeleteTask(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-
 }
