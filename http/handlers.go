@@ -1,13 +1,11 @@
 package http
 
 import (
-	"encoding/json"
-	"errors"
-	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 	"github.com/rwrrioe/todolist/todo"
 )
 
@@ -21,23 +19,9 @@ func NewHTTPHandlers(todoList *todo.List) *HTTPHandlers {
 	}
 }
 
-func HandleError(w http.ResponseWriter, err error) {
-	status := http.StatusInternalServerError
-
-	if errors.Is(err, todo.ErrTaskNotFound) {
-		status = http.StatusConflict
-	} else if errors.Is(err, todo.ErrTaskNotFound) {
-		status = http.StatusNotFound
-	}
-
-	errDTO := newErrorDTO(err, time.Now())
-	http.Error(w, errDTO.ToString(), status)
-
-}
-
-func HandleBadRequest(w http.ResponseWriter, err error) {
-	errDTO := newErrorDTO(err, time.Now())
-	http.Error(w, errDTO.ToString(), http.StatusBadRequest)
+func respondError(c *gin.Context, err error, status int) {
+	errorDTO := newErrorDTO(err, time.Now())
+	c.JSON(status, errorDTO)
 }
 
 /*
@@ -53,34 +37,24 @@ failed
 	-response body: JSON is error, time
 */
 
-func (h *HTTPHandlers) HandlerCreateTask(w http.ResponseWriter, r *http.Request) {
+func (h *HTTPHandlers) HandlerCreateTask(c *gin.Context) {
 	var taskDTO TaskDTO
-	if err := json.NewDecoder(r.Body).Decode(&taskDTO); err != nil {
-		errDTO := newErrorDTO(err, time.Now())
-		http.Error(w, errDTO.ToString(), http.StatusBadRequest)
-		return
+	if err := c.ShouldBindJSON(&taskDTO); err != nil {
+		respondError(c, err, 400)
 	}
 
 	if err := taskDTO.ValidateForCreate(); err != nil {
-		HandleBadRequest(w, err)
+		respondError(c, err, 400)
 		return
 	}
 
 	todoTask := todo.NewTask(taskDTO.Title, taskDTO.Description)
 	if err := h.todoList.AddTask(todoTask); err != nil {
-		HandleError(w, err)
+		respondError(c, err, 500)
 		return
-	}
 
-	b, err := json.MarshalIndent(todoTask, "", "    ")
-	if err != nil {
-		panic(err)
 	}
-	w.WriteHeader(http.StatusCreated)
-	if _, err := w.Write(b); err != nil {
-		fmt.Println("failed to write http response", err)
-		return
-	}
+	c.JSON(http.StatusCreated, todoTask)
 }
 
 /*
@@ -97,21 +71,16 @@ failed:
 	- responce body: JSON with error, time
 */
 
-func (h *HTTPHandlers) HandlerGetTask(w http.ResponseWriter, r *http.Request) {
-	title := mux.Vars(r)["title"]
+func (h *HTTPHandlers) HandlerGetTask(c *gin.Context) {
+	title := c.Param("title")
 
 	task, err := h.todoList.GetTask(title)
 	if err != nil {
-		HandleError(w, err)
+		respondError(c, err, 404)
 		return
 	}
-	b, err := json.MarshalIndent(task, "", "    ")
-	if err != nil {
-		panic(err)
-	}
 
-	w.WriteHeader(http.StatusOK)
-	w.Write(b)
+	c.JSON(200, task)
 }
 
 /*
@@ -128,18 +97,9 @@ failed:
 	- responce body: JSON with error, time
 */
 
-func (h *HTTPHandlers) HandlerGetAllTasks(w http.ResponseWriter, r *http.Request) {
+func (h *HTTPHandlers) HandlerGetAllTasks(c *gin.Context) {
 	tasks := h.todoList.ListTasks()
-	b, err := json.MarshalIndent(tasks, "", "    ")
-	if err != nil {
-		panic(err)
-	}
-
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(b); err != nil {
-		fmt.Println("failed to write http response:", err)
-		return
-	}
+	c.JSON(200, tasks)
 }
 
 /*
@@ -156,18 +116,21 @@ failed:
 	-statuc code 400, 404, 500...
 	- responce body: JSON with error, time
 */
-func (h *HTTPHandlers) HandlerGetAllUncompletedTasks(w http.ResponseWriter, r *http.Request) {
-	uncompletedTasks := h.todoList.ListUncompletedTasks()
-	b, err := json.MarshalIndent(uncompletedTasks, "", "    ")
+func (h *HTTPHandlers) HandlerGetAllUncompletedTasks(c *gin.Context) {
+	completedString := c.Query("completed")
+	var tasks map[string]todo.Task
+	completed, err := strconv.ParseBool(completedString)
 	if err != nil {
-		panic(err)
-	}
-
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(b); err != nil {
-		fmt.Println("failed to write http response:", err)
+		respondError(c, err, 400)
 		return
 	}
+
+	if completed {
+		tasks = h.todoList.ListTasks()
+	} else {
+		tasks = h.todoList.ListUncompletedTasks()
+	}
+	c.JSON(200, tasks)
 }
 
 /*
@@ -184,43 +147,34 @@ failed:
 	-statuc code 400, 409, 500...
 	-responce body: JSON with error, time
 */
-func (h *HTTPHandlers) HandlerCompleteTask(w http.ResponseWriter, r *http.Request) {
+func (h *HTTPHandlers) HandlerCompleteTask(c *gin.Context) {
 	completeDTO := CompleteDTO{false}
-	if err := json.NewDecoder(r.Body).Decode(&completeDTO); err != nil {
-		HandleBadRequest(w, err)
+	if err := c.ShouldBindJSON(&completeDTO); err != nil {
+		respondError(c, err, 400)
 		return
 	}
 
-	title := mux.Vars(r)["title"]
+	title := c.Param("title")
 
 	if completeDTO.Complete {
 		if err := h.todoList.CompleteTask(title); err != nil {
-			HandleError(w, err)
+			respondError(c, err, 404)
 			return
 		}
 	} else {
 		if err := h.todoList.UncompleteTask(title); err != nil {
-			HandleError(w, err)
+			respondError(c, err, 404)
 			return
 		}
 	}
 
 	task, err := h.todoList.GetTask(title)
 	if err != nil {
-		HandleError(w, err)
+		respondError(c, err, 404)
 		return
 	}
 
-	b, err := json.MarshalIndent(task, "", "    ")
-	if err != nil {
-		panic(err)
-	}
-
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(b); err != nil {
-		fmt.Println("failed to write http response:", err)
-		return
-	}
+	c.JSON(200, task)
 }
 
 /*
@@ -237,12 +191,12 @@ failed:
 	-statuc code 400, 404,500...
 	-responce body: JSON with error, time
 */
-func (h *HTTPHandlers) HandlerDeleteTask(w http.ResponseWriter, r *http.Request) {
-	title := mux.Vars(r)["title"]
+func (h *HTTPHandlers) HandlerDeleteTask(c *gin.Context) {
+	title := c.Param("title")
 	if err := h.todoList.DeleteTask(title); err != nil {
-		HandleError(w, err)
+		respondError(c, err, 404)
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	c.Status(204)
 }

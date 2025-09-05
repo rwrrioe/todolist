@@ -1,7 +1,6 @@
 package http
 
 import (
-	"encoding/json"
 	"errors"
 	"time"
 )
@@ -29,14 +28,6 @@ type CompleteDTO struct {
 type ErrorDTO struct {
 	Message string
 	Time    time.Time
-}
-
-func (e ErrorDTO) ToString() string {
-	b, err := json.MarshalIndent(e, "", "    ")
-	if err != nil {
-		panic(err)
-	}
-	return string(b)
 }
 
 func newErrorDTO(err error, time time.Time) ErrorDTO {
