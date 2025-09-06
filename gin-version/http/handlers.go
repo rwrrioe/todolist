@@ -1,7 +1,9 @@
 package http
 
 import (
+	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -19,9 +21,38 @@ func NewHTTPHandlers(todoList *todo.List) *HTTPHandlers {
 	}
 }
 
+func RecoveryMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				logError(rec)
+				c.JSON(500, gin.H{
+					"error": fmt.Sprint(rec),
+					"time":  time.Now(),
+				})
+				c.Abort()
+			}
+		}()
+		c.Next()
+	}
+}
+
+func logError(err interface{}) {
+	file, e := os.OpenFile("gin.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if e != nil {
+		fmt.Printf("failed to open log file: %v\n", e)
+		return
+	}
+	defer file.Close()
+	fmt.Fprintf(file, "[%s], %v\n", time.Now(), err)
+}
+
 func respondError(c *gin.Context, err error, status int) {
+	c.Error(err)
+	logError(err)
 	errorDTO := newErrorDTO(err, time.Now())
 	c.JSON(status, errorDTO)
+	c.Abort()
 }
 
 /*
@@ -45,14 +76,11 @@ func (h *HTTPHandlers) HandlerCreateTask(c *gin.Context) {
 
 	if err := taskDTO.ValidateForCreate(); err != nil {
 		respondError(c, err, 400)
-		return
 	}
 
 	todoTask := todo.NewTask(taskDTO.Title, taskDTO.Description)
 	if err := h.todoList.AddTask(todoTask); err != nil {
 		respondError(c, err, 500)
-		return
-
 	}
 	c.JSON(http.StatusCreated, todoTask)
 }
@@ -77,7 +105,6 @@ func (h *HTTPHandlers) HandlerGetTask(c *gin.Context) {
 	task, err := h.todoList.GetTask(title)
 	if err != nil {
 		respondError(c, err, 404)
-		return
 	}
 
 	c.JSON(200, task)
@@ -103,11 +130,9 @@ func (h *HTTPHandlers) HandlerGetAllTasks(c *gin.Context) {
 	if isCompleted != "" {
 		if isCompleted, err := strconv.ParseBool(isCompleted); err != nil {
 			respondError(c, err, 400)
-			return
 		} else if !isCompleted {
 			tasks := h.todoList.ListUncompletedTasks()
 			c.JSON(200, tasks)
-			return
 		}
 	}
 
@@ -133,7 +158,6 @@ func (h *HTTPHandlers) HandlerCompleteTask(c *gin.Context) {
 	completeDTO := CompleteDTO{false}
 	if err := c.ShouldBindJSON(&completeDTO); err != nil {
 		respondError(c, err, 400)
-		return
 	}
 
 	title := c.Param("title")
@@ -141,19 +165,16 @@ func (h *HTTPHandlers) HandlerCompleteTask(c *gin.Context) {
 	if completeDTO.Complete {
 		if err := h.todoList.CompleteTask(title); err != nil {
 			respondError(c, err, 404)
-			return
 		}
 	} else {
 		if err := h.todoList.UncompleteTask(title); err != nil {
 			respondError(c, err, 404)
-			return
 		}
 	}
 
 	task, err := h.todoList.GetTask(title)
 	if err != nil {
 		respondError(c, err, 404)
-		return
 	}
 
 	c.JSON(200, task)
@@ -177,7 +198,6 @@ func (h *HTTPHandlers) HandlerDeleteTask(c *gin.Context) {
 	title := c.Param("title")
 	if err := h.todoList.DeleteTask(title); err != nil {
 		respondError(c, err, 404)
-		return
 	}
 
 	c.Status(204)
