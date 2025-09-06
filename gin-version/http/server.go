@@ -18,6 +18,8 @@ func NewHTTPServer(HTTPHandler *HTTPHandlers) *HTTPServer {
 
 func (s *HTTPServer) StartServer() error {
 	router := gin.Default()
+	router.Use(RecoveryMiddleware())
+	router.Use(LoggerMiddleware())
 
 	router.POST("/tasks", s.HTTPHandlers.HandlerCreateTask)
 	router.GET("/tasks/:title", s.HTTPHandlers.HandlerGetTask)

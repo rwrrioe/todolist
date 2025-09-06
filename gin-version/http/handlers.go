@@ -25,7 +25,7 @@ func RecoveryMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {
 			if rec := recover(); rec != nil {
-				logError(rec)
+				logInfo(rec)
 				c.JSON(500, gin.H{
 					"error": fmt.Sprint(rec),
 					"time":  time.Now(),
@@ -37,22 +37,35 @@ func RecoveryMiddleware() gin.HandlerFunc {
 	}
 }
 
-func logError(err interface{}) {
+func logInfo(info interface{}) {
 	file, e := os.OpenFile("gin.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if e != nil {
 		fmt.Printf("failed to open log file: %v\n", e)
 		return
 	}
 	defer file.Close()
-	fmt.Fprintf(file, "[%s], %v\n", time.Now(), err)
+	fmt.Fprintf(file, "[%s], %v\n", time.Now(), info)
 }
 
 func respondError(c *gin.Context, err error, status int) {
 	c.Error(err)
-	logError(err)
+	logInfo(err)
 	errorDTO := newErrorDTO(err, time.Now())
 	c.JSON(status, errorDTO)
 	c.Abort()
+}
+
+func LoggerMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+
+		latency := time.Since(start)
+		logInfo(latency)
+
+		status := c.Writer.Status()
+		logInfo(status)
+	}
 }
 
 /*
