@@ -10,7 +10,7 @@ type HTTPServer struct {
 	HTTPHandlers *HTTPHandlers
 }
 
-func newHTTPServer(HTTPHandler *HTTPHandlers) *HTTPServer {
+func NewHTTPServer(HTTPHandler *HTTPHandlers) *HTTPServer {
 	return &HTTPServer{
 		HTTPHandlers: HTTPHandler,
 	}

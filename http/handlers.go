@@ -84,7 +84,7 @@ func (h *HTTPHandlers) HandlerGetTask(c *gin.Context) {
 }
 
 /*
-pattern: tasks
+pattern: tasks/ tasks/?completed=false
 method: GET
 info: pattern
 
@@ -98,38 +98,20 @@ failed:
 */
 
 func (h *HTTPHandlers) HandlerGetAllTasks(c *gin.Context) {
+	isCompleted := c.Query("completed")
+
+	if isCompleted != "" {
+		if isCompleted, err := strconv.ParseBool(isCompleted); err != nil {
+			respondError(c, err, 400)
+			return
+		} else if !isCompleted {
+			tasks := h.todoList.ListUncompletedTasks()
+			c.JSON(200, tasks)
+			return
+		}
+	}
+
 	tasks := h.todoList.ListTasks()
-	c.JSON(200, tasks)
-}
-
-/*
-pattern: tasks?completed=false
-method: GET
-info: query params
-
-succeed :
-  - status code 200 OK
-  - response body: JSON represents created tasks
-
-failed:
-
-	-statuc code 400, 404, 500...
-	- responce body: JSON with error, time
-*/
-func (h *HTTPHandlers) HandlerGetAllUncompletedTasks(c *gin.Context) {
-	completedString := c.Query("completed")
-	var tasks map[string]todo.Task
-	completed, err := strconv.ParseBool(completedString)
-	if err != nil {
-		respondError(c, err, 400)
-		return
-	}
-
-	if completed {
-		tasks = h.todoList.ListTasks()
-	} else {
-		tasks = h.todoList.ListUncompletedTasks()
-	}
 	c.JSON(200, tasks)
 }
 
