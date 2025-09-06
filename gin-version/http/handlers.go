@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/rwrrioe/todolist/todo"
+	"github.com/rwrrioe/todolist/gin-version/todo"
 )
 
 type HTTPHandlers struct {

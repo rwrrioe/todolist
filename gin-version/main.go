@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/rwrrioe/todolist/http"
-	"github.com/rwrrioe/todolist/todo"
+	"github.com/rwrrioe/todolist/gin-version/http"
+	"github.com/rwrrioe/todolist/gin-version/todo"
 )
 
 func main() {
